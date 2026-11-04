@@ -1,8 +1,10 @@
-﻿# 科务看板 1.2
+# 科务看板 1.2
 
 开发区科内部工作任务看板，面向 5 人科室的局域网协同系统。Windows 主机双击运行后以**托盘程序**常驻，其他成员通过浏览器访问，数据集中保存在主机 SQLite 数据库中。
 
 > 本项目为内部工作系统，公开仓库仅包含源代码、演示数据和文档，不包含实际业务数据库、备份文件或密钥。
+
+[**下载 1.2 正式版（Windows EXE）**](https://github.com/yaoqi888/kewu-board/releases/latest)
 
 ![任务清单](docs/screenshots/1.2-tasks.png)
 
