@@ -1,0 +1,35 @@
+# Local data and secrets
+server/data/
+server/devdata/
+server/testdata/
+server/static-testdata/
+server/finaltest/
+data/
+*.db
+*.db-wal
+*.db-shm
+secret.key
+backups/
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Build artifacts
+build/dist/
+build/work/
+build/*.spec
+dist/
+*.exe
+*.zip
+*.log
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

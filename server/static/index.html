@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#123B34">
+  <title>科务看板 1.2 · 开发区科工作任务平台</title>
+  <script>
+    try {
+      var themeId = localStorage.getItem("kewu_theme_v1");
+      if (["green", "blue", "sand", "graphite"].indexOf(themeId) >= 0) {
+        document.documentElement.setAttribute("data-theme", themeId);
+      }
+    } catch (err) { /* ignore */ }
+  </script>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <div id="boot-screen" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;background:var(--bg);color:var(--muted);font-family:var(--font);font-size:12px">
+    <div style="width:38px;height:38px;border:2px solid var(--line-strong);border-top-color:var(--primary);border-radius:50%;animation:kewu-spin .8s linear infinite"></div>
+    <span>正在载入工作台…</span>
+  </div>
+  <style>@keyframes kewu-spin{to{transform:rotate(360deg)}}</style>
+  <div class="app-shell">
+    <div class="sidebar-scrim" id="sidebar-scrim" data-action="close-sidebar" aria-hidden="true"></div>
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="#dashboard" aria-label="科务看板首页">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <rect x="5" y="6" width="22" height="21" rx="5" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M10 12h8M10 17h12M10 22h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M20.5 12l1.6 1.6 3-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span class="brand-copy">
+          <span class="brand-title">科务看板</span>
+          <span class="brand-sub">开发区科 · 工作任务</span>
+        </span>
+      </a>
+
+      <nav class="side-nav" aria-label="主导航">
+        <p class="nav-label">工作空间</p>
+        <a class="nav-item" href="#dashboard" data-nav="dashboard">
+          <span class="nav-icon" data-icon="dashboard"></span>
+          <span>工作台</span>
+        </a>
+        <a class="nav-item" href="#calendar" data-nav="calendar">
+          <span class="nav-icon" data-icon="calendar"></span>
+          <span>日历看板</span>
+        </a>
+        <a class="nav-item" href="#tasks" data-nav="tasks">
+          <span class="nav-icon" data-icon="tasks"></span>
+          <span>任务清单</span>
+          <span class="nav-count" id="nav-task-count" hidden></span>
+        </a>
+        <a class="nav-item" href="#recurring" data-nav="recurring">
+          <span class="nav-icon" data-icon="repeat"></span>
+          <span>周期任务</span>
+        </a>
+        <a class="nav-item" href="#archive" data-nav="archive">
+          <span class="nav-icon" data-icon="archive"></span>
+          <span>任务归档</span>
+        </a>
+
+        <p class="nav-label nav-label-spaced">管理</p>
+        <a class="nav-item" href="#settings" data-nav="settings" id="nav-settings">
+          <span class="nav-icon" data-icon="settings"></span>
+          <span>系统设置</span>
+        </a>
+        <button class="nav-item nav-button" type="button" data-action="open-help">
+          <span class="nav-icon" data-icon="help"></span>
+          <span>使用说明</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="preview-note">
+          <span class="status-dot"></span>
+          <div>
+            <strong>局域网正式版 1.2</strong>
+            <p>数据集中保存在本科室主机</p>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="main-shell">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="icon-button sidebar-toggle" type="button" data-action="toggle-sidebar" aria-label="打开导航">
+            <span data-icon="menu"></span>
+          </button>
+          <div class="crumb">
+            <span class="crumb-root">开发区科</span>
+            <span class="crumb-divider">/</span>
+            <strong id="page-title">工作台</strong>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <span class="preview-badge">正式版 1.2</span>
+          <details class="popover-wrap" id="theme-wrap">
+            <summary class="icon-button theme-button" aria-label="切换界面配色" title="切换界面配色">
+              <span data-icon="palette"></span>
+            </summary>
+            <div class="popover theme-popover" id="theme-popover"></div>
+          </details>
+          <details class="popover-wrap" id="notify-wrap">
+            <summary class="icon-button notify-button" id="notify-trigger" aria-label="查看提醒">
+              <span data-icon="bell"></span>
+              <span class="notify-badge" id="notify-badge" hidden></span>
+            </summary>
+            <div class="popover notify-popover" id="notify-popover"></div>
+          </details>
+          <span class="topbar-sep" aria-hidden="true"></span>
+          <details class="popover-wrap user-wrap" id="user-wrap">
+            <summary class="user-trigger" aria-label="账号菜单">
+              <span id="current-avatar"></span>
+              <span class="user-trigger-copy">
+                <strong id="current-user-name"></strong>
+                <small id="current-user-title"></small>
+              </span>
+              <span class="chevron" data-icon="chevron-down"></span>
+            </summary>
+            <div class="popover user-popover" id="user-popover"></div>
+          </details>
+          <button class="btn btn-primary topbar-new" type="button" data-action="new-task" id="topbar-new-task">
+            <span data-icon="plus"></span>
+            <span class="btn-label">新建任务</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="view" id="view" tabindex="-1"></main>
+    </div>
+  </div>
+
+  <div id="drawer-root"></div>
+  <div id="modal-root"></div>
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+
+  <script src="assets/xlsx.js"></script>
+  <script src="assets/docx.js"></script>
+  <script src="assets/holidays.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>
