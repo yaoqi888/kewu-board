@@ -1,4 +1,4 @@
-﻿/* =========================================================
+/* =========================================================
    科务看板 1.0 · 正式版前端
    数据由主机 SQLite 数据库集中保存，通过局域网 API 读写。
    ========================================================= */
@@ -32,22 +32,15 @@
 
   const SOURCES = ["市委市政府", "省商务厅", "局领导交办", "其他单位", "科室自定"];
 
-  const ACTIONABLE_HORIZON_DAYS = 7;
-
   const STATUS = {
     pending: { label: "待办", className: "status-pending" },
-    scheduled: { label: "计划中", className: "status-scheduled" },
     in_progress: { label: "办理中", className: "status-progress" },
     review: { label: "待审核", className: "status-review" },
     completed: { label: "已办结", className: "status-completed" }
   };
 
   function taskDisplayStatus(task) {
-    if (!task) return "pending";
-    if (task.status === "pending" && diffCalendarDays(task.dueDate) > ACTIONABLE_HORIZON_DAYS) {
-      return "scheduled";
-    }
-    return task.status;
+    return task ? task.status : "pending";
   }
 
   function statusLabel(task) {
@@ -1399,13 +1392,13 @@
   }
 
   function taskCounts() {
-    const counts = { all: state.tasks.length, pending: 0, scheduled: 0, in_progress: 0, review: 0, completed: 0 };
+    const counts = { all: state.tasks.length, pending: 0, in_progress: 0, review: 0, completed: 0 };
     state.tasks.forEach(function (task) {
       const key = taskDisplayStatus(task);
       if (counts[key] != null) counts[key] += 1;
     });
-    counts.unfinished = counts.pending + counts.scheduled + counts.in_progress + counts.review;
-    counts.actionable = counts.pending + counts.in_progress + counts.review;
+    counts.unfinished = counts.pending + counts.in_progress + counts.review;
+    counts.actionable = counts.unfinished;
     counts.upcoming = state.tasks.filter(isUpcoming).length;
     counts.overdue = state.tasks.filter(isOverdue).length;
     return counts;
@@ -1457,7 +1450,7 @@
   }
 
   function scopedTaskCounts() {
-    const counts = { all: 0, pending: 0, scheduled: 0, in_progress: 0, review: 0, completed: 0 };
+    const counts = { all: 0, pending: 0, in_progress: 0, review: 0, completed: 0 };
     const scoped = applyTaskFilters(state.tasks.slice(), { ignoreStatus: true });
     counts.all = scoped.length;
     scoped.forEach(function (task) {
@@ -1506,9 +1499,7 @@
 
   function myAttentionTasks() {
     const user = currentUser();
-    const mine = unfinishedTasks().filter(function (task) {
-      return task.assigneeId === user.id && taskDisplayStatus(task) !== "scheduled";
-    });
+    const mine = unfinishedTasks().filter(function (task) { return task.assigneeId === user.id; });
     if (!canManage()) return mine.sort(sortByDue);
     const reviews = unfinishedTasks().filter(function (task) { return task.status === "review"; });
     const otherMine = mine.filter(function (task) { return task.status !== "review"; });
@@ -1729,10 +1720,8 @@
     const navCount = document.getElementById("nav-task-count");
     if (navCount) {
       const navUnfinished = canManage()
-        ? counts.actionable
-        : state.tasks.filter(function (task) {
-          return task.assigneeId === user.id && task.status !== "completed" && taskDisplayStatus(task) !== "scheduled";
-        }).length;
+        ? counts.unfinished
+        : state.tasks.filter(function (task) { return task.assigneeId === user.id && task.status !== "completed"; }).length;
       navCount.textContent = String(navUnfinished);
       navCount.hidden = navUnfinished === 0;
     }
@@ -1834,7 +1823,7 @@
         label: "待办",
         value: counts.pending,
         iconName: "inbox",
-        foot: counts.scheduled ? "另有 <strong>" + counts.scheduled + "</strong> 项在计划中" : "等待开始办理",
+        foot: "等待开始办理",
         attrs: ""
       },
       {
@@ -2202,7 +2191,6 @@
     const tabs = [
       { key: "all", label: "全部", count: counts.all },
       { key: "pending", label: "待办", count: counts.pending },
-      { key: "scheduled", label: "计划中", count: counts.scheduled },
       { key: "in_progress", label: "办理中", count: counts.in_progress },
       { key: "review", label: "待审核", count: counts.review },
       { key: "completed", label: "已办结", count: counts.completed }
@@ -2352,7 +2340,7 @@
     const grid = templates.length
       ? '<div class="recurring-grid">' + templates.map(renderRecurringCard).join("") + "</div>"
       : '<section class="panel">' + emptyState("repeat", "还没有周期任务", canManage() ? "点击右上角“新建周期任务”，设置按周、月或季度自动生成。" : "等待科长或主任科员创建周期任务。") + "</section>";
-    return pageHead("周期任务", "按周期自动生成，每期独立流转、独立留档；暂停规则不会影响已经生成的任务。", actions) +
+    return pageHead("周期任务", "每期任务在截止日前 5 个工作日生成，每期独立流转、独立留档；暂停规则不会影响已经生成的任务。", actions) +
       summary + grid;
   }
 
@@ -2786,7 +2774,7 @@
     const aboutCard = '<section class="settings-card"><div class="settings-card-head"><div class="settings-card-title"><span class="settings-icon">' + icon("info") + "</span><div><h2>系统信息</h2><p>局域网正式运行版本</p></div></div></div>" +
       '<div class="about-list">' +
       '<div class="about-row"><span>系统名称</span><strong>' + APP_NAME + " · " + APP_SUBTITLE + "</strong></div>" +
-      '<div class="about-row"><span>版本</span><strong>1.2.1 正式版</strong></div>' +
+      '<div class="about-row"><span>版本</span><strong>1.2.2 正式版</strong></div>' +
       '<div class="about-row"><span>运行形态</span><strong>Windows 主机 · 局域网 Web 服务</strong></div>' +
       '<div class="about-row"><span>数据位置</span><strong>' + escapeHtml(state.settings.dataDir || "主机 data 目录") + '</strong></div>' +
       '<div class="about-row"><span>在用人员</span><strong>' + activePeople().length + " 人 · " + managerCount + " 名管理</strong></div>" +
@@ -3100,12 +3088,12 @@
       '<div class="form-field"><label for="task-due-time" id="due-time-label">' + (selectedType === "recurring" ? "本期截止时间" : "截止时间") + '<span class="required">*</span></label><input id="task-due-time" name="dueTime" type="time" required step="60" value="' + escapeHtml(dueTime) + '"><span class="field-hint">默认 18:00，可按实际截止时刻调整。</span></div>' +
       '<div class="form-field recurring-only"' + recurringHidden + '><label for="task-cycle">重复周期<span class="required">*</span></label><select id="task-cycle" name="cycle">' +
       Object.keys(CYCLE).map(function (key) { return '<option value="' + key + '"' + (selectedCycle === key ? " selected" : "") + ">" + CYCLE[key].label + "</option>"; }).join("") +
-      '</select><span class="field-hint">系统将自动生成下一周期任务，历史期次独立保留。</span></div>' +
+      '</select><span class="field-hint">每期任务在截止日前 5 个工作日生成，历史期次独立保留。</span></div>' +
       '<div class="form-field full"><label for="task-description">任务说明</label><textarea id="task-description" name="description" maxlength="800" placeholder="补充任务背景、交付要求或需协调事项">' + escapeHtml(task ? task.description : "") + "</textarea></div>" +
       "</div></div>" +
       typeSwitch +
       (editing && task.type === "recurring" ? '<div class="form-callout">' + icon("info") + "<span>本次修改仅影响当前这一期，不会改变周期规则；后续期次仍按原规则生成。</span></div>" : "") +
-      (!editing && selectedType === "recurring" ? '<div class="form-callout">' + icon("repeat") + "<span>创建后会先生成本期任务；之后每到新周期，系统自动生成新一期，上一期办理记录完整保留。</span></div>" : "") +
+      (!editing && selectedType === "recurring" ? '<div class="form-callout">' + icon("repeat") + "<span>创建周期规则后，首期任务将在截止日前 5 个工作日生成；之后每期自动生成，上一期办理记录完整保留。</span></div>" : "") +
       "</div>" +
       '<div class="modal-foot"><span class="foot-spacer"></span><button type="button" class="btn" data-action="close-modal">取消</button><button type="submit" class="btn btn-primary">' + (editing ? "保存修改" : "创建任务") + "</button></div>" +
       "</form>";
@@ -3127,7 +3115,7 @@
     const timeLabel = document.getElementById("due-time-label");
     if (timeLabel) timeLabel.innerHTML = (recurring ? "本期截止时间" : "截止时间") + '<span class="required">*</span>';
     const hint = document.getElementById("due-hint");
-    if (hint) hint.textContent = recurring ? "每期任务会在此日期基础上按周期顺延。" : "系统会在截止前 3 天和 1 天提醒。";
+    if (hint) hint.textContent = recurring ? "每期任务在截止日前 5 个工作日生成，并在此日期基础上按周期顺延。" : "系统会在截止前 3 天和 1 天提醒。";
   }
 
   function personModal(person) {
@@ -3701,12 +3689,16 @@
       currentRoute = "tasks";
       history.replaceState(null, "", "#tasks");
       await refreshState();
+      if (created.scheduled) {
+        toast("周期规则已创建", "首期任务将在截止日前 5 个工作日生成（" + created.dueDate + "）。", "success");
+        return;
+      }
       ui.drawerOpen = true;
       ui.selectedTaskId = created.id;
       renderDrawer();
       toast(
         taskType === "recurring" ? "周期任务已创建" : "任务已创建",
-        taskType === "recurring" ? "本期任务已生成，后续将按周期自动创建。" : "已分配给" + (getPerson(assigneeId) || {}).name + "。",
+        taskType === "recurring" ? "本期任务已生成，后续将在截止日前 5 个工作日生成。" : "已分配给" + (getPerson(assigneeId) || {}).name + "。",
         "success"
       );
     } catch (err) {
@@ -4634,6 +4626,7 @@
     init();
   }
 })();
+
 
 
 

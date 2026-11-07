@@ -1,6 +1,6 @@
 ﻿# -*- coding: utf-8 -*-
 """
-科务看板 1.2.1 正式版服务端
+科务看板 1.2.2 正式版服务端
 - Flask + SQLite + Waitress
 - 局域网集中数据、登录会话、服务端权限校验、周期任务、备份恢复
 - 任务来源、删除回收站、日历节假日、托盘运行
@@ -34,7 +34,7 @@ from urllib.request import Request, urlopen
 from flask import Flask, g, jsonify, redirect, render_template_string, request, send_file, send_from_directory, session
 from werkzeug.exceptions import HTTPException
 
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.2.2"
 APP_NAME = "科务看板"
 INITIAL_PASSWORD = "Kewu@2026"
 TASK_SOURCES = ["市委市政府", "省商务厅", "局领导交办", "其他单位", "科室自定"]
@@ -499,8 +499,19 @@ def serialize_state(user):
             "at": row["created_at"], "actorId": row["actor_id"],
             "action": row["action"], "note": row["note"],
         })
-    tasks = [task_payload(row, category_map, progress_map, event_map)
-             for row in conn.execute("SELECT * FROM tasks WHERE deleted_at IS NULL ORDER BY created_at, id").fetchall()]
+    today = date.today()
+    workday_maps = load_workday_maps(conn)
+    visible_rows = []
+    for row in conn.execute("SELECT * FROM tasks WHERE deleted_at IS NULL ORDER BY created_at, id").fetchall():
+        if row["type"] == "recurring" and row["status"] == "pending":
+            try:
+                due_day = date.fromisoformat(row["due_date"])
+            except Exception:
+                due_day = today
+            if today < recurring_release_date(due_day, workday_maps):
+                continue
+        visible_rows.append(row)
+    tasks = [task_payload(row, category_map, progress_map, event_map) for row in visible_rows]
     deleted_tasks = []
     if is_manager(user):
         deleted_tasks = [task_payload(row, category_map, progress_map, event_map)
@@ -687,6 +698,36 @@ def current_due_for_template(cycle, anchor_due, today):
     return today
 
 
+def load_workday_maps(conn):
+    maps = {}
+    for row in conn.execute("SELECT year, days_json FROM calendar_years").fetchall():
+        try:
+            maps[int(row["year"])] = json.loads(row["days_json"])
+        except Exception:
+            maps[int(row["year"])] = {}
+    return maps
+
+
+def is_workday(day, maps):
+    info = (maps.get(day.year) or {}).get(day.isoformat())
+    if info is not None:
+        return not bool(info.get("off"))
+    return day.weekday() < 5
+
+
+def recurring_release_date(due_date, maps):
+    """截止日前的第 5 个工作日（不含截止日）。"""
+    cursor = due_date - timedelta(days=1)
+    counted = 0
+    while counted < 5:
+        if is_workday(cursor, maps):
+            counted += 1
+            if counted == 5:
+                return cursor
+        cursor -= timedelta(days=1)
+    return due_date
+
+
 def next_task_code(conn):
     year = date.today().year
     prefix = f"RW-{year}-"
@@ -728,6 +769,7 @@ def generate_recurring():
         try:
             conn.execute("BEGIN IMMEDIATE")
             templates = conn.execute("SELECT * FROM templates WHERE active = 1 ORDER BY created_at").fetchall()
+            workday_maps = load_workday_maps(conn)
             for template in templates:
                 anchor = valid_iso_date(template["anchor_due"])
                 if not anchor:
@@ -736,6 +778,8 @@ def generate_recurring():
                 if period_key_for(template["cycle"], today) < period_key_for(template["cycle"], anchor):
                     continue
                 due = current_due_for_template(template["cycle"], template["anchor_due"], today)
+                if today < recurring_release_date(due, workday_maps):
+                    continue
                 key = period_key_for(template["cycle"], due)
                 exists = conn.execute(
                     "SELECT 1 FROM tasks WHERE template_id = ? AND period_key = ?",
@@ -1068,13 +1112,17 @@ def create_task():
                 (template_id, title, description, category["id"], source, assignee_id, cycle, due.isoformat(), due_time, 1, user["id"], created, created),
             )
             period_key = period_key_for(cycle, due)
-        task_id = insert_task_row(
-            conn, title=title, description=description, category_row=category,
-            assignee_id=assignee_id, creator_id=user["id"], due_date=due.isoformat(),
-            due_time=due_time, task_type=task_type, template_id=template_id, period_key=period_key, source=source,
-        )
+        task_id = None
+        workday_maps = load_workday_maps(conn)
+        if task_type != "recurring" or date.today() >= recurring_release_date(due, workday_maps):
+            task_id = insert_task_row(
+                conn, title=title, description=description, category_row=category,
+                assignee_id=assignee_id, creator_id=user["id"], due_date=due.isoformat(),
+                due_time=due_time, task_type=task_type, template_id=template_id, period_key=period_key, source=source,
+            )
     logger.info("创建任务: %s by %s", title, user["name"])
-    return jsonify({"ok": True, "id": task_id, "state": serialize_state(current_user())})
+    return jsonify({"ok": True, "id": task_id, "scheduled": task_type == "recurring" and task_id is None,
+                    "dueDate": due.isoformat(), "state": serialize_state(current_user())})
 
 
 @app.route("/api/tasks/<task_id>", methods=["PUT"])
@@ -1807,7 +1855,7 @@ def set_autostart(enabled):
 
 def start_server_thread():
     from waitress.server import create_server
-    server = create_server(app, host=HOST, port=PORT, threads=8, channel_timeout=120, ident="KewuBoard/1.2.1")
+    server = create_server(app, host=HOST, port=PORT, threads=8, channel_timeout=120, ident="KewuBoard/1.2.2")
     threading.Thread(target=server.run, name="kewu-server", daemon=True).start()
     return server
 
@@ -1868,7 +1916,7 @@ def run_tray(fresh):
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("退出服务", quit_app),
     )
-    icon = pystray.Icon("kewu-board", image, "科务看板 1.2.1 · 运行中", menu)
+    icon = pystray.Icon("kewu-board", image, "科务看板 1.2.2 · 运行中", menu)
     try:
         start_server_thread()
     except Exception as exc:
@@ -1907,10 +1955,11 @@ def main():
         return
     print_startup_info(fresh)
     from waitress import serve
-    serve(app, host=HOST, port=PORT, threads=8, channel_timeout=120, ident="KewuBoard/1.2.1")
+    serve(app, host=HOST, port=PORT, threads=8, channel_timeout=120, ident="KewuBoard/1.2.2")
 
 
 if __name__ == "__main__":
     main()
+
 
 
