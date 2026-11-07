@@ -1,4 +1,4 @@
-/* =========================================================
+﻿/* =========================================================
    科务看板 1.0 · 正式版前端
    数据由主机 SQLite 数据库集中保存，通过局域网 API 读写。
    ========================================================= */
@@ -32,12 +32,28 @@
 
   const SOURCES = ["市委市政府", "省商务厅", "局领导交办", "其他单位", "科室自定"];
 
+  const ACTIONABLE_HORIZON_DAYS = 7;
+
   const STATUS = {
     pending: { label: "待办", className: "status-pending" },
+    scheduled: { label: "计划中", className: "status-scheduled" },
     in_progress: { label: "办理中", className: "status-progress" },
     review: { label: "待审核", className: "status-review" },
     completed: { label: "已办结", className: "status-completed" }
   };
+
+  function taskDisplayStatus(task) {
+    if (!task) return "pending";
+    if (task.status === "pending" && diffCalendarDays(task.dueDate) > ACTIONABLE_HORIZON_DAYS) {
+      return "scheduled";
+    }
+    return task.status;
+  }
+
+  function statusLabel(task) {
+    const key = typeof task === "string" ? task : taskDisplayStatus(task);
+    return STATUS[key] ? STATUS[key].label : key;
+  }
 
   const CYCLE = {
     weekly: { label: "每周", short: "周", unit: "周" },
@@ -1344,8 +1360,9 @@
     return '<span class="avatar ' + (size || "") + toneClass + inactiveClass + '" title="' + escapeHtml(person.name) + '">' + escapeHtml(person.name.slice(0, 1)) + "</span>";
   }
 
-  function statusPill(status) {
-    const info = STATUS[status] || STATUS.pending;
+  function statusPill(taskOrStatus) {
+    const key = typeof taskOrStatus === "string" ? taskOrStatus : taskDisplayStatus(taskOrStatus);
+    const info = STATUS[key] || STATUS.pending;
     return '<span class="status-pill ' + info.className + '">' + info.label + "</span>";
   }
 
@@ -1382,11 +1399,13 @@
   }
 
   function taskCounts() {
-    const counts = { all: state.tasks.length, pending: 0, in_progress: 0, review: 0, completed: 0 };
+    const counts = { all: state.tasks.length, pending: 0, scheduled: 0, in_progress: 0, review: 0, completed: 0 };
     state.tasks.forEach(function (task) {
-      if (counts[task.status] != null) counts[task.status] += 1;
+      const key = taskDisplayStatus(task);
+      if (counts[key] != null) counts[key] += 1;
     });
-    counts.unfinished = counts.pending + counts.in_progress + counts.review;
+    counts.unfinished = counts.pending + counts.scheduled + counts.in_progress + counts.review;
+    counts.actionable = counts.pending + counts.in_progress + counts.review;
     counts.upcoming = state.tasks.filter(isUpcoming).length;
     counts.overdue = state.tasks.filter(isOverdue).length;
     return counts;
@@ -1417,7 +1436,7 @@
 
   function searchableText(task) {
     const assignee = getPerson(task.assigneeId);
-    return [task.title, task.description, task.code, task.category, task.source, assignee ? assignee.name : "", STATUS[task.status] ? STATUS[task.status].label : ""]
+    return [task.title, task.description, task.code, task.category, task.source, assignee ? assignee.name : "", statusLabel(task)]
       .join(" ").toLowerCase();
   }
 
@@ -1426,7 +1445,7 @@
     const search = (opts.search != null ? opts.search : ui.taskSearch).trim().toLowerCase();
     const ignoreStatus = opts.ignoreStatus === true;
     return tasks.filter(function (task) {
-      if (!ignoreStatus && ui.taskStatus !== "all" && task.status !== ui.taskStatus) return false;
+      if (!ignoreStatus && ui.taskStatus !== "all" && taskDisplayStatus(task) !== ui.taskStatus) return false;
       if (ui.taskAssignee !== "all" && task.assigneeId !== ui.taskAssignee) return false;
       if (ui.sourceFilter !== "all" && taskSource(task) !== ui.sourceFilter) return false;
       if (ui.taskType !== "all" && task.type !== ui.taskType) return false;
@@ -1438,11 +1457,12 @@
   }
 
   function scopedTaskCounts() {
-    const counts = { all: 0, pending: 0, in_progress: 0, review: 0, completed: 0 };
+    const counts = { all: 0, pending: 0, scheduled: 0, in_progress: 0, review: 0, completed: 0 };
     const scoped = applyTaskFilters(state.tasks.slice(), { ignoreStatus: true });
     counts.all = scoped.length;
     scoped.forEach(function (task) {
-      if (counts[task.status] != null) counts[task.status] += 1;
+      const key = taskDisplayStatus(task);
+      if (counts[key] != null) counts[key] += 1;
     });
     return counts;
   }
@@ -1486,7 +1506,9 @@
 
   function myAttentionTasks() {
     const user = currentUser();
-    const mine = unfinishedTasks().filter(function (task) { return task.assigneeId === user.id; });
+    const mine = unfinishedTasks().filter(function (task) {
+      return task.assigneeId === user.id && taskDisplayStatus(task) !== "scheduled";
+    });
     if (!canManage()) return mine.sort(sortByDue);
     const reviews = unfinishedTasks().filter(function (task) { return task.status === "review"; });
     const otherMine = mine.filter(function (task) { return task.status !== "review"; });
@@ -1707,8 +1729,10 @@
     const navCount = document.getElementById("nav-task-count");
     if (navCount) {
       const navUnfinished = canManage()
-        ? counts.unfinished
-        : state.tasks.filter(function (task) { return task.assigneeId === user.id && task.status !== "completed"; }).length;
+        ? counts.actionable
+        : state.tasks.filter(function (task) {
+          return task.assigneeId === user.id && task.status !== "completed" && taskDisplayStatus(task) !== "scheduled";
+        }).length;
       navCount.textContent = String(navUnfinished);
       navCount.hidden = navUnfinished === 0;
     }
@@ -1810,7 +1834,7 @@
         label: "待办",
         value: counts.pending,
         iconName: "inbox",
-        foot: "等待开始办理",
+        foot: counts.scheduled ? "另有 <strong>" + counts.scheduled + "</strong> 项在计划中" : "等待开始办理",
         attrs: ""
       },
       {
@@ -1963,7 +1987,7 @@
       return '<button type="button" class="recurring-mini" data-action="' + (task ? "open-task" : "go-recurring") + '" data-id="' + escapeHtml(task ? task.id : template.id) + '">' +
         '<span class="cycle-mark">' + cycle.short + "<span>周期</span></span>" +
         '<span class="recurring-mini-copy"><strong>' + escapeHtml(template.title) + "</strong><small>" + escapeHtml(cycle.label) + " · " + escapeHtml(owner ? owner.name : "未指派") + (task ? " · " + escapeHtml(due.label) : "") + "</small></span>" +
-        '<span class="recurring-mini-state">' + (task ? statusPill(task.status) : '<span class="type-pill">待生成</span>') + "<small>" + (task ? escapeHtml(formatMonthDay(task.dueDate) + " " + formatDueTime(task)) + " 截止" : "下个周期") + "</small></span>" +
+        '<span class="recurring-mini-state">' + (task ? statusPill(task) : '<span class="type-pill">待生成</span>') + "<small>" + (task ? escapeHtml(formatMonthDay(task.dueDate) + " " + formatDueTime(task)) + " 截止" : "下个周期") + "</small></span>" +
         "</button>";
     }).join("");
 
@@ -2038,7 +2062,8 @@
       (tasks.length ? '<span class="calendar-count">' + tasks.length + "</span>" : "") + "</div>" +
       (info.name ? '<span class="calendar-day-name">' + escapeHtml(info.name) + "</span>" : "") +
       '<div class="calendar-task-list">' + visible.map(function (task) {
-        return '<span class="calendar-task status-' + task.status + '" data-action="open-task" data-id="' + escapeHtml(task.id) + '" title="' + escapeHtml(task.title + " · " + STATUS[task.status].label) + '">' + escapeHtml(task.title) + "</span>";
+        const displayStatus = taskDisplayStatus(task);
+        return '<span class="calendar-task status-' + displayStatus + '" data-action="open-task" data-id="' + escapeHtml(task.id) + '" title="' + escapeHtml(task.title + " · " + statusLabel(task)) + '">' + escapeHtml(task.title) + "</span>";
       }).join("") + (tasks.length > 3 ? '<span class="calendar-more">还有 ' + (tasks.length - 3) + " 项</span>" : "") + "</div></div>";
   }
 
@@ -2059,7 +2084,7 @@
         const owner = getPerson(task.assigneeId);
         return '<button type="button" class="calendar-panel-task" data-action="open-task" data-id="' + escapeHtml(task.id) + '">' +
           '<span class="calendar-panel-task-main"><strong>' + escapeHtml(task.title) + "</strong><small>" + escapeHtml(taskSource(task)) + " · " + escapeHtml(task.category || "") + "</small></span>" +
-          '<span class="calendar-panel-task-side">' + userAvatar(owner, "sm") + "<span>" + escapeHtml(owner ? owner.name : "未指派") + "</span>" + statusPill(task.status) + "</span></button>";
+          '<span class="calendar-panel-task-side">' + userAvatar(owner, "sm") + "<span>" + escapeHtml(owner ? owner.name : "未指派") + "</span>" + statusPill(task) + "</span></button>";
       }).join("") + "</div>" : '<div class="calendar-panel-empty">' + icon("calendar") + "这一天没有任务。</div>") + "</section>";
   }
 
@@ -2155,7 +2180,7 @@
       '<span class="task-owner">' + userAvatar(owner, "sm") + "<span>" + escapeHtml(owner ? owner.name : "未指派") + "</span></span>" +
       '<span class="task-start' + (task.startedAt ? "" : " muted") + '">' + escapeHtml(taskStartLabel(task)) + "</span>" +
       '<span class="task-due"><span class="due-label ' + dueClass + '">' + escapeHtml(duePrimary) + "</span><small>" + escapeHtml(small) + "</small></span>" +
-      '<span class="task-status-cell">' + statusPill(task.status) + "</span>" +
+      '<span class="task-status-cell">' + statusPill(task) + "</span>" +
       '<span class="task-chevron">' + icon("chevron-right") + "</span>" +
       "</div>";
   }
@@ -2177,6 +2202,7 @@
     const tabs = [
       { key: "all", label: "全部", count: counts.all },
       { key: "pending", label: "待办", count: counts.pending },
+      { key: "scheduled", label: "计划中", count: counts.scheduled },
       { key: "in_progress", label: "办理中", count: counts.in_progress },
       { key: "review", label: "待审核", count: counts.review },
       { key: "completed", label: "已办结", count: counts.completed }
@@ -2269,7 +2295,7 @@
     if (!visible.length) return '<div class="series-empty">还没有历史期次，本期办结后会在此保留记录。</div>';
     return '<div class="history-dots">' + visible.map(function (task) {
       return '<button type="button" class="history-period" data-action="open-task" data-id="' + escapeHtml(task.id) + '" title="' + escapeHtml(task.title + " · " + task.dueDate) + '">' +
-        "<small>" + escapeHtml(periodShortLabel(template.cycle, task.dueDate)) + "</small>" + statusPill(task.status) + "</button>";
+        "<small>" + escapeHtml(periodShortLabel(template.cycle, task.dueDate)) + "</small>" + statusPill(task) + "</button>";
     }).join("") + "</div>";
   }
 
@@ -2489,7 +2515,7 @@
       (data.open.length ? '<div class="report-preview-group"><strong>本周期在办事项</strong>' + data.open.map(function (task) {
         const owner = getPerson(task.assigneeId);
         return '<div class="report-preview-item"><span>' + escapeHtml(task.title) + "</span><small>" +
-          escapeHtml((owner ? owner.name : "未指派") + " · " + (STATUS[task.status] ? STATUS[task.status].label : task.status)) + "</small></div>";
+          escapeHtml((owner ? owner.name : "未指派") + " · " + statusLabel(task)) + "</small></div>";
       }).join("") + "</div>" : "");
   }
 
@@ -2563,7 +2589,7 @@
           const last = (task.progress || []).slice().reverse().find(function (entry) { return entry.content; });
           return {
             title: task.title,
-            meta: "责任人：" + (owner ? owner.name : "未指派") + "｜状态：" + (STATUS[task.status] ? STATUS[task.status].label : task.status) + "｜开始：" + (task.startedAt ? formatShortDateTime(task.startedAt) : "未开始") + "｜来源：" + taskSource(task),
+            meta: "责任人：" + (owner ? owner.name : "未指派") + "｜状态：" + statusLabel(task) + "｜开始：" + (task.startedAt ? formatShortDateTime(task.startedAt) : "未开始") + "｜来源：" + taskSource(task),
             result: last ? last.content : "正在推进"
           };
         })
@@ -2760,7 +2786,7 @@
     const aboutCard = '<section class="settings-card"><div class="settings-card-head"><div class="settings-card-title"><span class="settings-icon">' + icon("info") + "</span><div><h2>系统信息</h2><p>局域网正式运行版本</p></div></div></div>" +
       '<div class="about-list">' +
       '<div class="about-row"><span>系统名称</span><strong>' + APP_NAME + " · " + APP_SUBTITLE + "</strong></div>" +
-      '<div class="about-row"><span>版本</span><strong>1.2 正式版</strong></div>' +
+      '<div class="about-row"><span>版本</span><strong>1.2.1 正式版</strong></div>' +
       '<div class="about-row"><span>运行形态</span><strong>Windows 主机 · 局域网 Web 服务</strong></div>' +
       '<div class="about-row"><span>数据位置</span><strong>' + escapeHtml(state.settings.dataDir || "主机 data 目录") + '</strong></div>' +
       '<div class="about-row"><span>在用人员</span><strong>' + activePeople().length + " 人 · " + managerCount + " 名管理</strong></div>" +
@@ -2976,7 +3002,7 @@
 
     root.innerHTML = '<div class="drawer-backdrop" data-action="drawer-backdrop"></div>' +
       '<aside class="drawer" role="dialog" aria-modal="true" aria-label="任务详情">' +
-      '<div class="drawer-head"><div><div class="drawer-kicker">' + typePill(task) + categoryPill(task.category) + statusPill(task.status) + "</div>" +
+      '<div class="drawer-head"><div><div class="drawer-kicker">' + typePill(task) + categoryPill(task.category) + statusPill(task) + "</div>" +
       '<h2 class="drawer-title">' + escapeHtml(task.title) + "</h2></div>" +
       '<div class="drawer-head-side">' + (canEditTask(task) ? '<button type="button" class="icon-button" data-action="edit-task" data-id="' + escapeHtml(task.id) + '" aria-label="编辑任务">' + icon("edit") + "</button>" : "") +
       '<button type="button" class="icon-button" data-action="close-drawer" aria-label="关闭详情">' + icon("x") + "</button></div></div>" +
@@ -3288,7 +3314,7 @@
       return '<button type="button" class="history-modal-row" data-action="open-task" data-id="' + escapeHtml(task.id) + '">' +
         '<span class="history-modal-period">' + escapeHtml(periodShortLabel(template.cycle, task.dueDate)) + "</span>" +
         '<span class="history-modal-title">' + escapeHtml(task.title) + "</span>" +
-        '<span class="due-label ' + due.className + '">' + escapeHtml(due.label) + "</span>" + statusPill(task.status) + "</button>";
+        '<span class="due-label ' + due.className + '">' + escapeHtml(due.label) + "</span>" + statusPill(task) + "</button>";
     }).join("");
     const content = modalHead("历史期次 · " + template.title, "共 " + tasks.length + " 期，每一期均独立记录、独立审核。") +
       '<div class="modal-body"><div class="history-modal-list">' + (rows || emptyState("repeat", "还没有历史期次", "")) + "</div></div>" +
@@ -3960,7 +3986,7 @@
         task.category || "",
         taskSource(task),
         assignee ? assignee.name : "未指派",
-        STATUS[task.status] ? STATUS[task.status].label : task.status,
+        statusLabel(task),
         task.dueDate ? task.dueDate + " " + formatDueTime(task) : "",
         due.label,
         excelDateTime(task.startedAt),
@@ -4608,6 +4634,7 @@
     init();
   }
 })();
+
 
 
 

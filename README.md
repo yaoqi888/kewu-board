@@ -1,10 +1,10 @@
-# 科务看板 1.2
+﻿# 科务看板 1.2.1
 
 开发区科内部工作任务看板，面向 5 人科室的局域网协同系统。Windows 主机双击运行后以**托盘程序**常驻，其他成员通过浏览器访问，数据集中保存在主机 SQLite 数据库中。
 
-> 本项目为内部工作系统，公开仓库仅包含源代码、演示数据和文档，不包含实际业务数据库、备份文件或密钥。
+> 版本 1.2.1：未来 7 天以外的待办任务显示为“计划中”，不占用待办数量。
 
-[**下载 1.2 正式版（Windows EXE）**](https://github.com/yaoqi888/kewu-board/releases/latest)
+> 本项目为内部工作系统，公开仓库仅包含源代码、演示数据和文档，不包含实际业务数据库、备份文件或密钥。
 
 ![任务清单](docs/screenshots/1.2-tasks.png)
 
@@ -12,6 +12,7 @@
 
 - 登录与权限：管理层/普通成员，首次登录强制改密，PBKDF2 密码哈希，CSRF 防护
 - 任务办理：新建、编辑、开始办理、进展、提交审核、审核办结、退回重办
+- 计划中：未来 7 天以外的待办任务不占用待办数量，可单独筛选查看
 - 四节点时间轴：新建任务 → 开始办理 → 提交审核 → 审核办结
 - 任务来源：市委市政府、省商务厅、局领导交办、其他单位、科室自定
 - 工作分类：数据报表、文字材料、调研督导、会议活动、协调对接、其他事务
@@ -79,17 +80,17 @@ python server/app.py
 
 ## 构建 EXE
 
-先准备应用图标 `build-assets/kewu.ico` 和版本信息 `build-assets/version_info.txt`，然后：
+先准备应用图标 `build/kewu.ico` 和版本信息 `build/version_info.txt`，然后：
 
 ```powershell
 pyinstaller --noconfirm --clean --onefile --windowed `
   --name "科务看板" `
-  --icon "$PWD/build-assets/kewu.ico" `
-  --version-file "$PWD/build-assets/version_info.txt" `
-  --add-data "$PWD/server/static;static" `
-  --add-data "$PWD/server/schema.sql;." `
-  --add-data "$PWD/server/holidays-2026.json;." `
-  --add-data "$PWD/build-assets/kewu.ico;." `
+  --icon "build/kewu.ico" `
+  --version-file "build/version_info.txt" `
+  --add-data "server/static;static" `
+  --add-data "server/schema.sql;." `
+  --add-data "server/holidays-2026.json;." `
+  --add-data "build/kewu.ico;." `
   --collect-all waitress --collect-all pystray `
   --distpath "build/dist" --workpath "build/work" --specpath "build" `
   "server/app.py"
@@ -143,5 +144,4 @@ data/
 ## 说明
 
 演示数据和截图中的姓名仅用于界面展示。实际部署时请使用本科室真实账号，并在首次登录后修改所有初始密码。
-
 

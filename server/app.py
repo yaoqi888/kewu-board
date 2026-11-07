@@ -1,6 +1,6 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
-科务看板 1.2 正式版服务端
+科务看板 1.2.1 正式版服务端
 - Flask + SQLite + Waitress
 - 局域网集中数据、登录会话、服务端权限校验、周期任务、备份恢复
 - 任务来源、删除回收站、日历节假日、托盘运行
@@ -34,7 +34,7 @@ from urllib.request import Request, urlopen
 from flask import Flask, g, jsonify, redirect, render_template_string, request, send_file, send_from_directory, session
 from werkzeug.exceptions import HTTPException
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 APP_NAME = "科务看板"
 INITIAL_PASSWORD = "Kewu@2026"
 TASK_SOURCES = ["市委市政府", "省商务厅", "局领导交办", "其他单位", "科室自定"]
@@ -1807,7 +1807,7 @@ def set_autostart(enabled):
 
 def start_server_thread():
     from waitress.server import create_server
-    server = create_server(app, host=HOST, port=PORT, threads=8, channel_timeout=120, ident="KewuBoard/1.2")
+    server = create_server(app, host=HOST, port=PORT, threads=8, channel_timeout=120, ident="KewuBoard/1.2.1")
     threading.Thread(target=server.run, name="kewu-server", daemon=True).start()
     return server
 
@@ -1868,7 +1868,7 @@ def run_tray(fresh):
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("退出服务", quit_app),
     )
-    icon = pystray.Icon("kewu-board", image, "科务看板 1.2 · 运行中", menu)
+    icon = pystray.Icon("kewu-board", image, "科务看板 1.2.1 · 运行中", menu)
     try:
         start_server_thread()
     except Exception as exc:
@@ -1907,8 +1907,10 @@ def main():
         return
     print_startup_info(fresh)
     from waitress import serve
-    serve(app, host=HOST, port=PORT, threads=8, channel_timeout=120, ident="KewuBoard/1.2")
+    serve(app, host=HOST, port=PORT, threads=8, channel_timeout=120, ident="KewuBoard/1.2.1")
 
 
 if __name__ == "__main__":
     main()
+
+

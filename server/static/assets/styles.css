@@ -1088,6 +1088,11 @@ textarea:focus-visible {
   color: #66736e;
 }
 
+.status-scheduled {
+  background: #eef1f7;
+  color: #69758b;
+}
+
 .status-progress {
   background: var(--blue-soft);
   color: var(--blue);
@@ -3190,6 +3195,7 @@ textarea:focus-visible {
 }
 
 .calendar-task.status-pending { border-left-color: var(--muted-light); }
+.calendar-task.status-scheduled { border-left-color: #9aa5ba; opacity: 0.82; }
 .calendar-task.status-in_progress { border-left-color: var(--blue); }
 .calendar-task.status-review { border-left-color: var(--amber); }
 .calendar-task.status-completed { border-left-color: var(--primary); opacity: 0.66; }
